@@ -160,3 +160,48 @@ Make sure you have Node.js 20.19+ and all dependencies installed.
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
+________________
+
+
+graph TD
+    subgraph "Request Flow"
+        direction TB
+        A[👤 Client sends POST Request] --> B[Django Dev Server / WSGI];
+        B --> C[Project URL Router <br/> watch_movie/urls.py];
+        C -- /watch/... --> D[App URL Router <br/> watchlist_app/urls.py];
+        D -- 'stream/&lt;pk&gt;/review-create' --> E[ReviewCreate View <br/> views.py];
+        E -- Checks Permission --> F[IsAuthenticated <br/> DRF Permissions];
+        E -- Uses Serializer for validation --> G[Review_serializer <br/> serializers.py];
+        G -- Validates request data --> E;
+        E -- On success, calls --> H[perform_create Method <br/> within ReviewCreate view];
+        H -- Fetches movie --> I[Django ORM];
+        I -- SELECT query --> J[WatchList Model <br/> models.py];
+        J --> K[SQLite Database];
+        K -- Returns movie data --> J;
+        J --> I;
+        I --> H;
+        H -- Updates movie rating, calls serializer.save --> G;
+        G -- Creates new review instance --> L[Review Model <br/> models.py];
+        L -- INSERT query via ORM --> K;
+    end
+
+    subgraph "Response Flow"
+        %% Connections are now defined from the source of the data to the destination, using -->
+        K2[SQLite Database] --> L2[Review Model <br/> models.py];
+        L2 -- New review data --> G2[Review_serializer <br/> serializers.py];
+        G2 -- Serializes new review --> E2[ReviewCreate View <br/> views.py];
+        E2 --> B2[Django Dev Server / WSGI];
+        B2 --> A2[👤 Client receives 201 Response];
+    end
+
+    %% Styling and invisible links for layout
+    linkStyle 16 stroke-width:2px,fill:none,stroke:green;
+    linkStyle 17 stroke-width:2px,fill:none,stroke:green;
+    linkStyle 18 stroke-width:2px,fill:none,stroke:green;
+    linkStyle 19 stroke-width:2px,fill:none,stroke:green;
+    linkStyle 20 stroke-width:2px,fill:none,stroke:green;
+
+
+    K --> K2;
+    style K fill:#fff,stroke:#fff,stroke-width:0px
+    style K2 fill:#fff,stroke:#fff,stroke-width:0px
