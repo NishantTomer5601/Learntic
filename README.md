@@ -205,3 +205,162 @@ graph TD
     K --> K2;
     style K fill:#fff,stroke:#fff,stroke-width:0px
     style K2 fill:#fff,stroke:#fff,stroke-width:0px
+------------------------------------------------------------------------
+
+import React, { useState, useEffect } from 'react';
+import mermaid from 'mermaid';
+
+// Initialize Mermaid
+mermaid.initialize({ startOnLoad: true });
+
+const DagRenderer = ({ initialApiData }) => {
+  // State to hold the entire graph object from your API
+  const [graphData, setGraphData] = useState(null);
+
+  useEffect(() => {
+    // On initial load, set the graph data from the first API call
+    if (initialApiData) {
+      // IMPORTANT: Validate the incoming data first!
+      const validatedData = validateApiResponse(initialApiData);
+      setGraphData(validatedData);
+    }
+  }, [initialApiData]);
+
+  useEffect(() => {
+    // Whenever graphData changes, re-render the Mermaid diagram
+    if (graphData) {
+      mermaid.contentLoaded();
+    }
+  }, [graphData]);
+
+  // The function to handle node expansion
+  const handleNodeClick = async (nodeId) => {
+    // ... (Implementation in the next step)
+  };
+  
+  // Expose the click handler to the global scope so Mermaid can call it
+  window.handleNodeClick = handleNodeClick;
+
+  if (!graphData) {
+    return <div>Loading graph...</div>;
+  }
+
+  return (
+    <div>
+      {/* The key is rendering the 'graphDefinition' from your state */}
+      <div className="mermaid">
+        {graphData.graphDefinition}
+      </div>
+    </div>
+  );
+};
+
+----------------------------------------------------------------------
+
+{
+  "graphDefinition": "graph TD;\n    A[Monolith API]:::expandable --> B[Database];\n    A --> C{Message Queue};\n    D[Frontend App] --> A;\n\n    %% Styling and Clicks\n    classDef expandable fill:#89cff0,stroke:#333,stroke-width:2px,cursor:pointer;\n    click A call handleNodeClick(\"A\")",
+  "nodes": {
+    "A": {
+      "is_expandable": true,
+      "summary": "The main monolithic API handling all business logic.",
+      "resource": "https://internal-docs/monolith-api"
+    },
+    "B": {
+      "is_expandable": false,
+      "summary": "PostgreSQL database for data persistence.",
+      "resource": null
+    }
+  },
+  "context": "A high-level view of the primary application architecture."
+}
+
+----------------------------------------------------------------------
+
+const handleNodeClick = async (nodeId) => {
+    const nodeMeta = graphData.nodes[nodeId];
+
+    // 1. Check if the node is expandable
+    if (nodeMeta && nodeMeta.is_expandable) {
+      console.log(`Expanding node: ${nodeId}`);
+      
+      // Show a loading indicator if you want
+      
+      // 2. Prepare the payload for the expansion API
+      const payload = {
+        previousContext: graphData.context,
+        currentGraph: graphData.graphDefinition,
+        nodeToExpand: nodeId
+      };
+      
+      // 3. Call your GPT API
+      try {
+        const response = await fetch('/api/expand-node', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const newGraphData = await response.json();
+        
+        // 4. Validate and update the state
+        const validatedData = validateApiResponse(newGraphData);
+        setGraphData(validatedData); // This triggers the re-render!
+
+      } catch (error) {
+        console.error("Failed to expand node:", error);
+        // Handle error (e.g., show a toast notification)
+      }
+
+    } else {
+      // 5. Handle non-expandable nodes (summarize, redirect, etc.)
+      alert(`Summary for ${nodeId}: ${nodeMeta.summary}`);
+      if (nodeMeta.resource) {
+        window.open(nodeMeta.resource, '_blank');
+      }
+    }
+  };
+
+  // Remember to expose it to the window object for Mermaid
+  window.handleNodeClick = handleNodeClick;
+
+  ----------------------------------------------------------------------
+
+  "You are an expert code architect. Below is the current Mermaid DAG representing a codebase. The user has clicked on the node with ID A ('Monolith API').
+
+Current Context: A high-level view of the primary application architecture.
+Current Graph:
+
+Code snippet
+
+graph TD;
+   A[Monolith API] --> B[Database];
+Now, expand only the A node into a detailed subgraph showing its internal components (e.g., 'Auth Service', 'User Service', 'Payment Gateway'). Integrate this new subgraph into the main graph, replacing the original A node. The new components should link to each other and to the existing B node where appropriate. Return the complete new Mermaid string and updated node metadata in the specified JSON format. Ensure all newly created nodes inside the subgraph are not expandable."
+
+----------------------------------------------------------------
+
+import { z } from 'zod';
+
+const NodeMetadataSchema = z.object({
+  is_expandable: z.boolean(),
+  summary: z.string().optional().nullable(),
+  resource: z.string().url().optional().nullable()
+});
+
+const ApiResponseSchema = z.object({
+  graphDefinition: z.string().min(10), // Must be a reasonably long string
+  nodes: z.record(NodeMetadataSchema), // An object where keys are strings and values match NodeMetadataSchema
+  context: z.string().optional()
+});
+
+function validateApiResponse(data) {
+  try {
+    const validatedData = ApiResponseSchema.parse(data);
+    // You could add further validation, like ensuring the Mermaid string is syntactically valid
+    return validatedData;
+  } catch (error) {
+    console.error("API Response Validation Failed:", error);
+    // Throw an error or return a default state to prevent app crashes
+    throw new Error("Received invalid data from the server.");
+  }
+}
+
+-------------------------------------------------------------------
